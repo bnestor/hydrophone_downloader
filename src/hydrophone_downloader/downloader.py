@@ -21,6 +21,7 @@ import time
 
 from supported_classes.ooi_class import OOIDownloadClass
 from supported_classes.onc_class import ONCDownloadClass
+from supported_classes.orcasound_class import OrcasoundDownloadClass
 
 
 def download_data(
@@ -56,7 +57,7 @@ def download_data(
 
 
 
-    all_classes = [ONCDownloadClass(), OOIDownloadClass(),]
+    all_classes = [ONCDownloadClass(), OOIDownloadClass(),OrcasoundDownloadClass()]
 
     for download_class in all_classes:
         download_class.download_data(

@@ -23,7 +23,9 @@ dependencies = [
     "onc",
     "ffmpeg",
     "bs4",
-    "polars"
+    "polars",
+    "boto3",
+    "tqdm"
 ]
 
 # Entry points to expose command-line interfaces

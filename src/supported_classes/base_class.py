@@ -7,8 +7,12 @@ download_class.py
 
 import os
 
-from datetime import datetime
+# from datetime import datetime
+import datetime
 import git
+
+from typing import Union
+import re
 
 
 
@@ -39,25 +43,66 @@ class BaseDownloadClass:
     def download_data(self, min_lat, max_lat, min_lon, max_lon, min_depth, max_depth, license, start_time, end_time, save_dir):
         raise NotImplementedError("Derived classes must implement this method.")
     
-    def filter_deployments(self, min_lat, max_lat, min_lon, max_lon, min_depth, max_depth, license, start_time, end_time):
+    
+    def filter_deployments(self, 
+                            min_lat: float,
+                            max_lat: float,
+                            min_lon: float,
+                            max_lon: float,
+                            min_depth: float,
+                            max_depth: float,
+                            license: str,
+                            start_time: Union[datetime.datetime, datetime.date, str],
+                            end_time: Union[datetime.datetime, datetime.date, str],
+                            verbose=True) -> list:
         """
         Filter deployments based on the specified parameters
         """
 
+        if isinstance(start_time, str):
+            start_time = datetime.datetime.fromisoformat(start_time) #string must be in ISO 8601 format
+        if isinstance(end_time, str):
+            end_time = datetime.datetime.fromisoformat(end_time)
+
+        # localize to UTC if tz is None
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=datetime.timezone.utc)
+        if end_time.tzinfo is None:
+            end_time = end_time.replace(tzinfo=datetime.timezone.utc)
+
 
         # deployments_out = [d for d in self.deployments if ((d['latitude']>=min_lat and d['latitude']<=max_lat) and (d['longitude']>=min_lon and d['longitude']<=max_lon)) and (d['depth']>=min_depth and d['depth']<=max_depth) ]
         # latitude_range
+        if verbose: print("num deployments before filter:", len(self.deployments))
         deployments_out = [d for d in self.deployments if d['latitude']>=min_lat and d['latitude']<=max_lat]
+        if verbose: print("num deployments after latitude filter:", len(deployments_out))
         # longitude_range
         deployments_out = [d for d in deployments_out if d['longitude']>=min_lon and d['longitude']<=max_lon]
+        if verbose: print("num deployments after longitude filter:", len(deployments_out))
         # depth_range
         deployments_out = [d for d in deployments_out if d['depth']>=min_depth and d['depth']<=max_depth]
+        if verbose: print("num deployments after depth filter:", len(deployments_out))
     
         if len(deployments_out)==0:
             print("No deployments found for the specified location.")
             return deployments_out
+        
+        print(deployments_out[0]['date'], type(deployments_out[0]['date']), start_time, type(start_time), end_time, type(end_time))
 
-        deployments_out = [d for d in deployments_out if d['date']>=datetime.strptime(start_time, '%Y-%m-%d').date() and d['date']<=datetime.strptime(end_time, '%Y-%m-%d').date()]
+
+        if type(deployments_out[0]['date']) is datetime.date:
+            deployments_out = [d for d in deployments_out if d['date']>=start_time.date() and d['date']<=end_time.date()] # option with no timestamps
+        elif type(deployments_out[0]['date']) is datetime.datetime:
+            assert type(deployments_out[0]['date']) is type(start_time), f"deployments_out date type {type(deployments_out[0]['date'])} does not match start_time type {type(start_time)}"
+            assert type(deployments_out[0]['date']) is type(end_time), f"deployments_out date type {type(deployments_out[0]['date'])} does not match end_time type {type(end_time)}"
+
+
+            start_time_date_only = datetime.datetime.combine(start_time.date(), datetime.time.min, tzinfo=start_time.tzinfo)
+            deployments_out = [d for d in deployments_out if d['date']>=start_time_date_only and d['date']<=end_time] # option with timestamps
+        else:
+            raise ValueError(f"deployment is not a datetime or date object. It is a {type(deployments_out[0]['date'])}")
+
+        if verbose: print("num deployments after time filter:", len(deployments_out))
 
         if len(deployments_out)==0:
             print("No deployments found for the specified time range.")
@@ -65,6 +110,7 @@ class BaseDownloadClass:
 
         if license is not None:
             deployments_out = [d for d in deployments_out if d['license']==license]
+            if verbose: print("num deployments after license filter:", len(deployments_out))
 
         if len(deployments_out)==0:
             print("No deployments found for the specified license.")

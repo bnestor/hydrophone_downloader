@@ -12,7 +12,7 @@ import os
 import shutil
 import json
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 from onc.onc import ONC
@@ -157,6 +157,18 @@ class ONCDownloadClass(BaseDownloadClass):
                     if date <= datetime.strptime('2021-04-09', '%Y-%m-%d').date():
                         extension='wav'
 
+
+                    # convert date from datetime.date to datetime.datetime
+                    date = datetime.combine(date, datetime.min.time())
+                    date = max(date, begin)
+
+                    # localize to UTC
+                    if date.tzinfo is None:
+                        date = date.replace(tzinfo=timezone.utc)
+
+
+
+
                     
                     filters = {
                         'deviceCode':deployment['deviceCode'],    # AML CTD Metrec X 50348 in Burrard Inlet
@@ -166,9 +178,11 @@ class ONCDownloadClass(BaseDownloadClass):
                         'extension':extension,
                     }
 
+
+
                     deployments_out.append({'date': date, 'latitude': deployment['lat'], 'longitude': deployment['lon'], 'depth': deployment['depth'], 'license': self.license, 'locationCode':locationCode, 'source': 'ONC', 'fname':fname, 'citation':citation, 'filters':filters})
 
-        print('There are', len(deployments_out), 'deployments available from ONC')
+        print(f'There are {len(deployments_out)} days of deployments available from ONC')
         return deployments_out
 
     
@@ -180,6 +194,8 @@ class ONCDownloadClass(BaseDownloadClass):
         outPath = os.path.join(save_dir, 'tmp_'+str_gen())
         self.onc = ONC(token=self.token, outPath=outPath)
 
+
+
         # print(len(self.deployments), 'deployments available')
         deployments = self.filter_deployments(min_lat, max_lat, min_lon, max_lon, min_depth, max_depth, license, start_time, end_time)
         # print(len(deployments), 'deployments after filtering')
@@ -190,6 +206,21 @@ class ONCDownloadClass(BaseDownloadClass):
             fname = os.path.join(save_dir, deployment['fname'])
             os.makedirs(fname, exist_ok=True)
 
+            if type(start_time) is str:
+                start_time = datetime.fromisoformat(start_time)
+                if start_time.tzinfo is None:
+                    start_time = start_time.replace(tzinfo=timezone.utc)
+            if type(end_time) is str:
+                end_time = datetime.fromisoformat(end_time)
+                if end_time.tzinfo is None:
+                    end_time = end_time.replace(tzinfo=timezone.utc)
+
+            date_from = max(date, start_time)
+            date_to = min(date + timedelta(days=1), end_time)
+
+
+
+
             citation = deployment['citation']
             if citation is not None:
                 author, year, title, journal, doi = citation.split('. ')
@@ -198,6 +229,8 @@ class ONCDownloadClass(BaseDownloadClass):
                     f.write(citation)
 
             filters_archived = filters.copy()
+            filters_archived['dateFrom'] = start_time.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+            filters_archived['dateTo'] = end_time.strftime('%Y-%m-%dT%H:%M:%S.000Z')
             filters_archived['rowLimit'] = 80000
             results = self.onc.getListByDevice(filters_archived)
             if len(results['files'])>0:
@@ -215,7 +248,9 @@ class ONCDownloadClass(BaseDownloadClass):
                     pass
             else:
                 # optional parameters to loop through and try:
-                filters_orig = {'locationCode': locationCode,'deviceCategoryCode':'HYDROPHONE','dataProductCode':'AD','extension':'flac','dateFrom':date.strftime('%Y-%m-%d'),'dateTo':(date+timedelta(days=1)).strftime('%Y-%m-%d'),'dpo_audioDownsample':-1} #, 'dpo_audioFormatConversion':0}
+                filters_orig = {'locationCode': locationCode,'deviceCategoryCode':'HYDROPHONE','dataProductCode':'AD','extension':'flac','dateFrom':date_from.strftime('%Y-%m-%dT%H:%M:%S.000Z'),'dateTo':date_to.strftime('%Y-%m-%dT%H:%M:%S.000Z'),'dpo_audioDownsample':-1} #, 'dpo_audioFormatConversion':0}
+
+
                 # if filters_orig['locationCode']+filters_orig['dateFrom'] in log:
                 #     continue
 
